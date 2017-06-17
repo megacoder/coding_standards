@@ -1,0 +1,471 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.3//EN"
+"http://www.oasis-open.org/docbook/xml/4.3/docbookx.dtd" [
+  <!ENTITY  FIXME       "Funky stuff"                                     >
+]>
+<article lang="en">
+  <title>Programming Recommendations For 32-bit And 64-bit Clean Programs</title>
+  <articleinfo>
+    <author>
+      <firstname>Tommy</firstname>
+      <surname>Reynolds</surname>
+    </author>
+  </articleinfo>
+  <section id="sn-intro">
+    <title>Introduction</title>
+    <para>
+      Programmers frequently rely on unstated assumptions about their programming environment that are contrary-to-fact.
+      Their efforts may appear to work in one environment but may fail miserably in a different, equally-conforming environment.
+      What went wrong?
+    </para>
+    <para>
+      The C language standard, which specifies the standards with which a C compiler is expected to conform, leaves some surprising details up to to each indivual compiler writer.
+      These topics are deliberatly vague to allow as many environments as possible to support the C language, but can trip-up an unwary programmer.
+    </para>
+    <para>
+      The following paragraphs describe both how to protect oneself and how to deal with common portability issues encountered in the migration from a 32-bit program design to a 64-bit design.
+    </para>
+  </section>
+  <section id="sn-compilation">
+    <title>Compiling Programs For 32-Bit or 64-Bit Mode</title>
+    <para>
+      The <abbrev>GCC</abbrev> programming toolchain (compiler and runtime libraries) have been updated so that <emphasis>no</emphasis> source code changes are necessary for either 32-bit or 64-bit operation.
+      All that is needed is to tell the compiler what you want.
+    </para>
+    <para>
+      Trying to build an executable using a mixture of 32-bit and 64-bit objects is not going to work.
+    </para>
+    <para>
+      Earlier toolchain versions required heavy magic in the compilation command line, providing preprocessor symbol definitions and such.
+      Not any more.
+    </para>
+    <section id="sn-warnings">
+      <title>Let The Compiler Do Its Job</title>
+      <para>
+        The <abbrev>GCC</abbrev> compiler suite is rather good at identifying potential misuses and mismatches of variable types.
+        Since the program analysis and code generation phases of <application>gcc</application> are language-indepentent, they rely very heavily on variable types and program flow structure rather than upon any expectations based on the programming language.
+        Thus, any displayed warnings should be viewed as the compiler announcing an assumption it has made about the code.
+      </para>
+      <para>
+        Unfortunately, many <abbrev>GCC</abbrev> warnings are not enabled by default.
+        Other errors are detected by the code optmization phase; without having a <code>-O</code> command-line switch, these checks are not made at all.
+      </para>
+      <para>
+        Below are a suggested list of compilation flags which are valuable in writing code to be used in an heterogenous 32-bit and 64-bit environment.
+      </para>
+      <section id="sn-warnings-lang">
+        <title>Specify Source Code Language</title>
+        <para>
+          Strictly speaking, the default C language accepted by the <application>gcc</application> compiler is not really C at all.
+          Instead, it is a hodge-podge collection of language constructs used to write C code over the years; the goal here is not to break many legacy programs.
+        </para>
+        <para>
+          The default C language used by <application>gcc</application> should never be used to write new code.
+          Firstly, the resulting code will not be C but &quot;<abbrev>GNU</abbrev> C&quot; frankencode instead.
+          Secondly, if the default for the language changes, as it is planned to do in the indeterminate future, the program code will no longer be valid.
+        </para>
+        <para>
+          Below is a table showing the current C language standards supported by the <abbrev>GNU</abbrev> <abbrev>GCC</abbrev> compiler suite.
+          This document makes no recommendation about which standard should be selected, but be aware that making no selection is a selection too.
+        </para>
+        <table id="tbl-std" width="95%">
+          <title>GCC C Standard Selection</title>
+          <tgroup cols="2">
+            <thead>
+              <colspec colnum="1" colwidth="25%"/>
+              <colspec colnum="2" colwidth="75%"/>
+              <row>
+                <entry><phrase>Option</phrase></entry>
+                <entry><phrase>Description</phrase></entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry><phrase><code>-std=c89</code></phrase></entry>
+                <entry><phrase><abbrev>ISO C90</abbrev>, same as <code>-ansi</code></phrase></entry>
+              </row>
+              <row>
+                <entry><phrase><code>-std=gnu89</code></phrase></entry>
+                <entry><phrase>Default; <abbrev>ISO C90</abbrev> plus <abbrev>GCC</abbrev> extentions; includes some <abbrev>C99</abbrev> features</phrase></entry>
+              </row>
+              <row>
+                <entry><phrase><code>-std=c99</code></phrase></entry>
+                <entry><phrase><abbrev>ISO C99</abbrev>, not yet fully supported; check
+                <ulink url="http://gcc.gnu.org/gcc-3.4/c99status.html"/> for details.</phrase></entry>
+              </row>
+              <row>
+                <entry><phrase><code>-std=gnu99</code></phrase></entry>
+                <entry><phrase><abbrev>ISO C99</abbrev>, plus <abbrev>GCC</abbrev> extentions; when <abbrev>C99</abbrev> support is complete, this will become the new default</phrase></entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+      </section>
+      <section id="sn-warnings-none">
+        <title>Every Warning Should Be Corrected</title>
+        <para>
+          The goal should be that <emphasis>no</emphasis> warnings be reported by the compiler.
+          If you see no warnings, you do not need to decide which warnings are harmless.
+        </para>
+        <para>
+          For example, the Linux kernel has about 6 million lines of code.
+          Compiling them all results in only a few dozen warnings, and these are being stamped out.
+        </para>
+        <para>
+          Recall that an <application>gcc</application> warning is really a cry for help from the compiler: it was faced with a decision that could not be made based on information gleaned from the code and the compiler made a best guess.
+        </para>
+      </section>
+      <section id="sn-warnings-opt">
+        <title>Enable Program Optmization</title>
+        <para>
+          Some warnings, such as those for uninitialized variables, cannot be detected unless the optmization phase is enabled.
+          Use the <code>-O</code> command line switch for this.
+        </para>
+        <para>
+          The <abbrev>GCC</abbrev> compilers can do varying amounts of optmization, from none to mangle-beyond-recognition.
+          Its aggressive optmizations, <code>-O3</code> and above, can make the code impossible to debug.
+        </para>
+        <para>
+          Code compiled for debugging should use the <code>-O0</code> switch; that is a dash-big_oh-zero sequence.
+          The optimizer pass is run, but not allowed to actually shuffle the code around; perfect for detecting warnings and allowing debug both.
+        </para>
+      </section>
+      <section id="sn-warnings-error">
+        <title>Switch <code>-Werror</code></title>
+        <para>
+          By default, warnings are exactly that: a line of text written by the compiler but that do not disturb the compilation.
+          <wordasword	>Warnings</wordasword> are not <wordasword>errors</wordasword>.
+        </para>
+        <para>
+          Supplying the <code>-Werror</code> switch changes that.
+          Any warning will be treated as a compilation error and will disrupt the compilation.
+        </para>
+        <para>
+          In spite of your initial repulse, you <emphasis>do</emphasis> want this behavior.
+        </para>
+      </section>
+      <section id="sn-warnings-wall">
+        <title>Switch <code>-Wall</code></title>
+        <para>
+          Enables all warnings.
+        </para>
+        <para>
+          Well, not really all of them but just many common warnings.
+          There are a vast number of additional warnings that you can read about by using the <code>info gcc</code> command-line tool.
+          Warnings may be enabled or disabled on an individual basis.
+        </para>
+        <para>
+          You emphatically want this.
+        </para>
+      </section>
+      <section id="sn-warnings-extra">
+        <title>Switch <code>-Wextra</code></title>
+        <para>
+          Use the <code>-Wextra</code> switch to detect bad practices such as:
+        </para>
+        <itemizedlist>
+          <listitem><para>
+            Falling off the end of a non-<code>void</code> function.
+          </para></listitem>
+          <listitem><para>
+            An expression with no side effects.
+            Otherwise the expression will be evaluated and the value discarded; a waste of time and memory.
+          </para></listitem>
+          <listitem><para>
+            Comparing an unsigned value with <code>&lt; 0</code> and its friends like <code>&lt;= 0</code> get flagged.
+          </para></listitem>
+          <listitem><para>
+            Warn about unused function paramters.
+          </para></listitem>
+          <listitem><para>
+            Warn about comparison between signed and unsigned values.
+            While this is &quot;legal&quot;, interpreting the answer has changed and may produce unexpected results.
+          </para></listitem>
+          <listitem><para>
+            Function paramters declared using K&amp;R-style notation without types.
+          </para></listitem>
+        </itemizedlist>
+        <para>
+          Usually, you <emphasis>do</emphasis> want these additional warnings.
+        </para>
+      </section>
+      <section id="sn-warnings-pedantic">
+        <title>Switch <code>-pedantic</code></title>
+        <para>
+          Enables <emphasis>all</emphasis> warnings required by the selected language standard.
+          Unless the <code>-Werror</code> flag is also used, this switch should be given as <code>-pedantic-errors</code> to promote the warnings into an error.
+        </para>
+        <para>
+          Language standards require specific warnings to highlight dangerous constructs, or usage whose semantics may have changed.
+          You <emphasis>do</emphasis> want to be notified about these.
+        </para>
+      </section>
+    </section>
+    <section id="sn-compilation-32">
+      <title>Compiling For A 32-Bit World</title>
+      <para>
+        To invoke the compiler for the 32-bit compilation model:
+      </para>
+      <para>
+        <code>gcc -m32 foo.c</code>
+      </para>
+    </section>
+    <section id="sn-compilation-64">
+      <title>Compiling For A 64-bit World</title>
+      <para>
+        To invoke the compiler for the 64-bit compilation model:
+      </para>
+      <para>
+        <code>gcc -m64 foo.c</code>
+      </para>
+    </section>
+  </section>
+  <section id="sn-objects">
+    <title>The Objects Of My Desire</title>
+    <para>
+      Since 32-bit programs and 64-bit programs actually utilize different hardware circuitry, it is only natural that the characteristics of common C language-based objects change as well.
+      Most portability problems are caused by programmers forgetting the rules of the road.
+      Since C objects are closely-coupled to their underlying hardware representation, the arbitrarily interchanging variable types often works as the programmer expects: an <code>unsigned</code> is simply a different interpretation of an <code>int</code>, right?
+      And if you get in a bind, you can <wordasword>cast</wordasword> your way out of it, right?
+    </para>
+    <para>
+      This practice is what causes portability problems between 32-bit models and 64-bit models.
+    </para>
+    <para>
+      For example, on many machines (especially the common 32-bit platforms) a <code>sizeof(int)</code> is exactly the same as <code>sizeof(int *)</code>.
+      Assuming this is true leads to constructs such as:
+    </para>
+    <para>
+      <programlisting>
+int i;
+int * p;
+
+i = p;
+      </programlisting>
+    </para>
+    <para>
+      Wait!
+      That example causes a compilation error or warning about an incompatible assignment!
+    </para>
+    <para>
+      No problem, a <wordasword>cast</wordasword> will avoid the warning:
+    </para>
+    <para>
+      <programlisting>i = (int) p;</programlisting>
+    </para>
+    <para>
+      Now the code will silently discard any higher-order address bits that cannot be saved into the <code>int</code>.
+      The compiler no longer complains, but the code does not work as intended.
+    </para>
+    <caution>
+      <title>Cast It Out!</title>
+      <para>
+        A <wordasword>cast</wordasword> in a program should always be viewed with suspicion.
+        It is commonly mis-used simply to silence compilation warnings instead of legitimately transforming a value to fit into another container.
+      </para>
+      <para>
+        The C language has defined rules that specifiy how values of one type are transformed into values of another type.
+        If you attempt to circumvent this behavior using a <wordasword>cast</wordasword>, do so only after careful review of your original data structure.
+      </para>
+    </caution>
+    <section id="sn-objects-sizes">
+      <title>Size Does Matter</title>
+      <para>
+        The C language enforces only a few contraints on compiler writers, and programmers in general, when it comes to basic program entities such as <code>int</code>&apos;s, <code>long</code>&apos;s, and the newer <code>long long</code>&apos;s.
+        About the only constraint is that:
+      </para>
+      <programlisting>
+sizeof( char ) &lt;= sizeof( short ) &lt;= sizeof( int ) &lt;= \
+sizeof( long ) &lt;= sizeof( long long )
+      </programlisting>
+      <para>
+        Nothing is said requiring a <code>char</code> to be eight bits;
+        nothing requires that a <code>short</code> actually be smaller than an <code>long long</code>.
+      </para>
+      <para>
+        Such decisions are left to the compiler designer, being regarded as a <emphasis>quality of implementation</emphasis> issue and not of language conformance.
+        Of course, they are strongly motivated to have their compiler not break the existing codebase but <emphasis>a conforming C compiler can legally make every object the same size</emphasis>.
+      </para>
+      <para>
+        Where it is important that program objects be able to handle numeric data with specific ranges, header files are usually available that define symbols such as <code>uint32_t</code>.
+      </para>
+      <para>
+        Binary data interchange is especially sensitive to sizing differences of generic objects such as <code>int</code>&apos;s.
+        Exported binary data should <emphasis>never</emphasis> be defined in terms of these generic variable types.
+      </para>
+    </section>
+    <section id="sn-objects-pointers">
+      <title>Pointers Versus Objects</title>
+      <para>
+        We have seen that generic program container objects, such as an <code>int</code>, have a specified hierarchy of sizes.
+      </para>
+      <itemizedlist>
+        <listitem>
+          <para>
+            The storage required to express a pointer to a container has no, repeat no, relationship to the size of the container.
+          </para>
+          <para>
+            Expressed this way, the tendancy to try to save a pointer into a integer-sized container seems as silly as it really is but it still happens all too commonly.
+            That it &quot;works&quot; at all is happenstance.
+            In every case.
+          </para>
+        </listitem>
+        <listitem>
+          <para>
+            There is no guarantee by the C language that all pointers are the same size.
+            Expressed another way, the compiler designer has complete freedom to choose that <code>sizeof(int *)</code> be a different value than <code>sizeof(char *)</code>.
+            Often embedded systems take advantage of this fact, but it is not common practice elsewhere.
+          </para>
+        </listitem>
+        <listitem><para>
+          All the C standards require is that a pointer of type <code>A</code> can be cast or stored into a pointer of type <code>B</code> and then recast or stored back into a pointer to type <code>A</code> having the same value as the original.
+          Whatever magic the compiler writer chooses to accomplish this is best left to ones imagination.
+          In practice, most pointers are the same physical size.
+        </para></listitem>
+      </itemizedlist>
+    </section>
+  </section>
+  <section id="sn-alignment">
+    <title>Variable Alignment Issues</title>
+    <para>
+      Every variable has a natural memory address alignment.
+      The general rule is that an <code>N</code>-byte object is best held in a memory cell whose address is an <code>N</code>-byte multiple.
+      When this rule is followed, the CPU and memory subsystems can access that value using the least amount of cycles, resulting in the best performance.
+    </para>
+    <para>
+      By using certain compiler attributes, or by performing explicit pointer arithmetic, one can cause an object to be stored into memory whose address is not a multiple of the object size.
+      This is called an <wordasword>unaligned access</wordasword> and the extra processing involved often a kiss-of-death to performance.
+    </para>
+    <para>
+      For this reason, care must be taken when designing data elements used frequently in a program.
+      While unaligned data are frequently encountered in network programming, the programmer must recognize them and use them sparingly.
+    </para>
+    <section id="sn-alignment-basic">
+      <title>Address Arithmetic</title>
+      <para>
+        On some systems, this code snippet:
+      </para>
+      <programlisting	>
+int * ip;
+char ch[32];
+
+ip = (int *) (ch + 1);
+*ip = 0;
+      </programlisting>
+      <para>
+        will work fine.
+        On other systems it may produce a bus error or segmentation violation.
+      </para>
+      <para>
+        The behavior is hardware-specific.
+        On platforms which run the Linux operating system, it is required that either:
+      </para>
+      <orderedlist>
+        <listitem><para>
+          The hardware transparently handle unaligned accesses, or
+        </para></listitem>
+        <listitem><para>
+          Refuse to perform the unaligned access.
+          Usually a processor trap is signaled.
+          A Linux platform is strictly required to complain if it cannot correctly make unaligned accesses.
+        </para></listitem>
+      </orderedlist>
+      <para>
+        Systems which cannot directly perform unaligned accesses have special code enabled in the Linux kernel to respond to the processor trap by making the unaligned access in software and transparently resuming the program.
+      </para>
+      <para>
+        This works, but it very, very slow.
+        An unaligned access in an inner loop is to be avoided.
+      </para>
+    </section>
+    <section id="sn-alignment-struct">
+      <title>Packed Structures</title>
+      <para>
+        In most application programs, unintentional unaligned access is often related to using packed structures.
+      </para>
+      <para>
+        Packed structures are usually encountered where the programmer is trying to avoid the &quot;slack bytes&quot; inserted by the compiler inside a structure so that its elements have structure offsets equal to their natural alignment.
+        The following snippet illustrates this:
+      </para>
+      <programlisting>
+struct holes_s {
+  char  c1;  /* Assume a single byte for this */
+  int   i1;  /* On a natural boundary or not? */
+};
+      </programlisting>
+      <para>
+        Normally, the compiler will insert enough padding between the <code>c1</code> and <code>i1</code> elements so that <code>i1</code> has the proper alignment.
+      </para>
+      <para>
+        The amount of padding could be <literal>3</literal> bytes on a 32-bit system, or <literal>7</literal> bytes on a 64-bit system.
+      </para>
+      <para>
+        Compilers will also insert slack bytes into the tail of a structure so that elements of an array of structures will have the proper alignment.
+        Again, this could range from <literal>1-3</literal> bytes on a 32-bit system to <literal>1-7</literal> bytes on a 64-bit system.
+      </para>
+      <para>
+        When using the contents of a packed data structure, consider expanding it (by copying each structure element by name into an unpacked cousin structure) rather than living with the extra processing.
+      </para>
+    </section>
+  </section>
+  <section id="sn-guidelines">
+    <title>Coding Guidelines</title>
+    <para>
+      To help maximize your 32-bit / 64-bit portability, follow these guidelines:
+    </para>
+    <section id="sn-guidelines-do">
+      <title>Do</title>
+      <itemizedlist>
+        <listitem><para>
+          Do specify the compiler model, such as <code>-m32</code> or <code>-m64</code> on each compiler command line.
+        </para></listitem>
+        <listitem><para>
+          Do specifiy the chosen compiler language on each compiler command line.
+          Use <code>-std=</code><replaceable>dialect</replaceable> where <replaceable>dialect</replaceable> is either <code>c99</code>, <code>c89</code>, <code>gnu99</code>, or <code>gnu89</code>.
+        </para></listitem>
+        <listitem><para>
+          Do turn on every compiler warning you can find.
+          Consider, as a minimum, the <code>-Wall</code>, <code>-Wextra</code>, <code>-Werror</code>, and <code>-pedantic</code> switches.
+        </para></listitem>
+        <listitem><para>
+          Do compile with the <code>-O</code> switch to enable the optmizer to detect additional warnings.
+          If debug using either <application>gdb</application>, <application>ddd</application>, or <application>insight</application> is anticipated, use the form <code>-O0</code> to run the optmizer and to prevent code rearrangement.
+        </para></listitem>
+        <listitem><para>
+          Do correct every compiler warning by designing them away, not by casting them out.
+        </para></listitem>
+        <listitem><para>
+          Do use <code>off_t</code> containers to hold file sizes and offsets.
+        </para></listitem>
+        <listitem><para>
+          Do use <code>size_t</code> containers to hold object sizes that are exchanged with the operating system, such as for the <code>read(2)</code> system call.
+        </para></listitem>
+        <listitem><para>
+          Do always use a &quot;<code>%llu</code>&quot; <code>printf(3)</code> format specifier to output an <code>off_t</code> or <code>size_t</code> object.
+        </para></listitem>
+        <listitem><para>
+          Do always cast an <code>off_t</code> or <code>size_t</code> object in a <code>printf(3)</code> argument list to a <code>(unsigned long long)</code> type.
+        </para></listitem>
+        <listitem><para>
+          Do view every <wordasword>cast</wordasword> as a potential portability problem.
+        </para></listitem>
+      </itemizedlist>
+    </section>
+    <section id="sn-guidelines-dont">
+      <title>Don&apos;t</title>
+      <itemizedlist>
+        <listitem><para>
+          Do not use basic types, such as <code>short</code> to represent binary objects in files, sockets, or exported data structures.
+        </para></listitem>
+        <listitem><para>
+          Do not use a <wordasword>cast</wordasword> simply to silence a compiler warning.
+        </para></listitem>
+        <listitem><para>
+          Do not assume that the size of a structure is the sum of the sizes of its elements.
+          The compiler may insert padding within a structure or append padding to the end of a structure.
+          The amount of padding may change, depending on the compiler addressing model.
+        </para></listitem>
+      </itemizedlist>
+    </section>
+  </section>
+</article>

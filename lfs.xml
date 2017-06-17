@@ -1,0 +1,155 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.3//EN"
+"http://www.oasis-open.org/docbook/xml/4.3/docbookx.dtd" [
+  <!ENTITY  FIXME       "Funky stuff"                                     >
+]>
+<article lang="en">
+  <title>Using The Linux Large File System (LFS)</title>
+  <articleinfo>
+    <author>
+      <firstname>Tommy</firstname>
+      <surname>Reynolds</surname>
+    </author>
+  </articleinfo>
+  <section id="sn-intro">
+    <title>Introduction</title>
+    <para>
+      Historically, the maximum size of a Linux file has been 2GB (when an <code>off_t</code> was a signed 32-bit item) and then 4GB (when the <code>off_t</code> was promoted to an unsigned 32-bit item).
+    </para>
+    <para>
+      To nobody's real surprise, programmers usually just used a simple <code>int</code> to hold file sizes and offsets.
+      After all, typing <code>int</code> is part of a C programmer's DNA.
+    </para>
+    <para>
+      Quickly, Moore's Law kicked in and the available disk space exploded.
+      Today personal systems with 200GB are common.
+      (How big is <emphasis>your</emphasis> IPOD?)
+    </para>
+    <para>
+      Linux moved into the server realm where terabyte files are common and 32-bits were just not big enough.
+      Having 64-bit file sizes seemed a reasonable step.
+      Unfortunately, an <code>int</code> is usually either a 16-bit or 32-bit quantity and only occasionally a 64-bit item.
+      Many programs written by lazy programmers simply broke.
+    </para>
+    <para>
+      What follows is a method which currently works correctly and also insulates the programmer from future concerns if file size limitations increase in the future.
+    </para>
+  </section>
+  <section id="sn-offsets">
+    <title>File Offsets And The off_t Type</title>
+    <para>
+      File sizes, and the logical I/O point within that file, may only be legally held by an <code>off_t</code> container.
+      Not an <code>int</code>, not an <code>unsigned long</code>, nor even a <code>unsigned long long</code>, but an <code>off_t</code> type.
+    </para>
+    <para>
+      Support for these larger file sizes has been incrementally added to the <abbrev>GNU</abbrev>
+      <abbrev>glibc</abbrev> runtime library.
+      Available documentation sources, such as Google.com, can offer contradictory, stale information about this topic.
+      This document represents the current state of the art.
+    </para>
+    <para>
+      The <abbrev>GNU</abbrev> <abbrev>GCC</abbrev> compiler collection presents a correctly-sized <code>off_t</code> for its compilation environment.
+      To avoid breaking &quot;working&quot; legacy code, <application>gcc</application> usually defaults <code>off_t</code> to match the size of an <code>int</code>, which is often sized to match the natural word size of the local machine.
+    </para>
+    <para>
+      Linux has offered a <code>O_LARGEFILE</code> flag to be OR'ed into other flags of the <code>open(2)</code> system call, plus 64-bit versions of <code>open(2)</code>, <code>lseek(2)</code>, <code>stat(2)</code> and others.
+      This was a temporary work-around which has now be superceeded by integral <abbrev>GCC</abbrev> support.
+    </para>
+    <para>
+      A correctly-written program must now <emphasis>never</emphasis> reference the <code>O_LARGEFILE</code> flag.
+      As we shall present below, there is a preferred solution which also does not break legacy code.
+    </para>
+  </section>
+  <section id="en-io_model">
+    <title>File I/O Model</title>
+    <example id="ex-io_model">
+      <title>File I/O Technique</title>
+      <para>
+        Below is an illustration of the classical <abbrev>UNIX</abbrev> I/O model.
+        It works unchanged either with either standard or <abbrev>LFS</abbrev> environments.
+      </para>
+      <programlisting>
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+#include &lt;fcntl.h&gt;
+
+int fd;
+off_t pos;
+char c;
+
+fd = open( &quot;/etc/passwd&quot;, O_RDONLY );
+pos = 500;
+lseek( fd, pos, SEEK_SET );
+read( fd, &amp;ch, 1 );
+      </programlisting>
+    </example>
+    <para>
+      There are no source code changes whether or not <abbrev>LFS</abbrev> is used.
+    </para>
+  </section>
+  <section id="sn-compilation">
+    <title>Compiling Programs To Use LFS</title>
+      <para>
+        Earlier <abbrev>GCC</abbrev> implementations required special preprocessor symbols be provided before the first system include file was referenced.
+        Rather than begin code surgery, these definitions were commonly placed on the compiler command line, but this practice was awkward and difficult to maintain portably.
+        Although that technique is still valid, but for how long we do not know, it is deprecated.
+        A preferred alternative exists.
+      </para>
+      <para>
+        The compiler magic to use <abbrev>LFS</abbrev> is accessed using the <abbrev>POSIX</abbrev> <application>getconf</application> tool:
+      </para>
+      <example id="ex-getconf">
+        <title>Using getconf(P) For LFS Configuration</title>
+        <programlisting width="5in">
+<prompt>$ </prompt><userinput>getconf LFS_CFLAGS</userinput>
+<computeroutput	>-D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64</computeroutput>
+<prompt>$ </prompt><userinput>getconf LFS_LDFLAGS</userinput>
+<prompt>$ </prompt>
+        </programlisting>
+      </example>
+      <para>
+        So, to make a portable <code>make(1)</code> <filename>Makefile</filename>, simply add this phrase to the <systemitem class="macro">CFLAGS</systemitem> and <systemitem class="macro">LDFLAGS</systemitem> macros:
+      </para>
+      <example id="ex-makefile">
+        <title>Makefile</title>
+        <programlisting width="5in">
+CFLAGS  += `getconf LFS_CFLAGS`
+LDFLAGS += `getconf LFS_LDFLAGS`
+        </programlisting>
+      </example>
+      <para>
+        With these preprocessor definitions supplied on the <application>gcc</application> command line, the <application>glibc</application> library transparently changes the definition of <code>off_t</code> to hold more than 31 bits worth of data.
+        The wicked <systemitem class="macro">O_LARGEFILE</systemitem> flag is also transparently added to the <code>open(2)</code> or <code>creat(2)</code> system calls.
+      </para>
+  </section>
+  <section id="sn-summary">
+    <title>Summary</title>
+    <orderedlist>
+      <listitem><para>
+        Do use the <code>off_t</code> to hold file sizes and file positions.
+      </para></listitem>
+      <listitem><para>
+        Do not use anything else, such as an <code>unsigned long long int</code> to hold a file size or file position.
+      </para></listitem>
+      <listitem><para>
+        Do print file sizes and positions using the <code>%llu</code> format specifier.
+        Do cast the corresponding <code>prinf(3)</code> argument specifier into an <code>(unsigned long long)</code> type.
+      </para></listitem>
+      <listitem><para>
+        Never directly reference <code>O_LARGEFILE</code> in a program.
+      </para></listitem>
+      <listitem><para>
+        Do add <code>`getconf LFS_CFLAGS`</code> to the compilation flags.
+        If your <application>make(1)</application> does not support this, run the command manually to see the appropriate flags.
+      </para></listitem>
+      <listitem><para>
+        Do add <code>`getconf LFS_LDFLAGS`</code> to the linker flags.
+        If your <application>make(1)</application> does not support this, run the command manually to see the appropriate flags.
+      </para></listitem>
+      <listitem><para>
+        Do not define <code>_LARGEFILE_SOURCE</code>, <code>_LARGEFILE64_SOURCE</code>, or <code>_FILE_OFFSET_BITS=n</code> in your source code.
+        These should be set via the compiler command line.
+      </para></listitem>
+    </orderedlist>
+  </section>
+</article>
